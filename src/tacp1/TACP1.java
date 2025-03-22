@@ -23,6 +23,9 @@ import java.time.LocalDate;
 import java.time.temporal.ChronoField;
 import java.time.LocalTime;
 import java.time.Duration;
+import java.io.FileReader;
+import java.io.IOException;
+import com.opencsv.CSVReader;
 
 /**
  *
@@ -42,7 +45,7 @@ public class TACP1 {
 
     // Time Formatter
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm");
-    private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("mm-DD-yyyy");
+    private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("MM-dd-yyyy");
       
     // Method to check credentials
     public static boolean checkCredentials(String empNumber/*can be changed*/, String lastName/*can be changed*/) {
@@ -98,6 +101,7 @@ public class TACP1 {
                         System.out.println("Full Name: " + fullName);
                         System.out.println("Employee Number: " + storedEmpNumber);
                         System.out.println("Birthday: " + birthday);
+                        System.out.println("----------------------------");
                         break;
                     }
                 }
@@ -114,10 +118,12 @@ public class TACP1 {
 
         while (true) {
             System.out.println("\nATTENDANCE MENU:");
-            System.out.println("\n1. List Attendance Records");
+            System.out.println("\n1. Daily Attendance Records");
             System.out.println("2. Calculate Hours Worked Per Week");
             System.out.println("3. Back to Main Menu");
+            System.out.println("----------------------------");
             System.out.print("\nEnter your choice: ");
+            
 
             int choice = scanner.nextInt();
             scanner.nextLine(); // Consume newline
@@ -149,23 +155,24 @@ public class TACP1 {
             br.readLine(); // Skip header
 
             boolean attendanceFound = false;
-            System.out.println("ATTENDANCE RECORDS: \n\n");
+            System.out.println("ATTENDANCE RECORDS:");
+            System.out.println("===================================================");
          
-
+            
             while ((line = br.readLine()) != null) {
                 String[] data = line.split(",");
                 if (data.length >= 6) { // Ensuring required columns exist
                     String storedEmpNumber = data[0].trim(); // Column A
                     if (storedEmpNumber.equals(empNumber)) {
                         String date = data[3].trim(); // Column B
-                        //String status = data[2].trim(); // Column C
+                        String status = data[0].trim(); // Column A
                         String logInTime = data[4].trim(); // Column E
                         String logOutTime = data[5].trim(); // Column F
 
                         // Calculate hours worked
                         double hoursWorked = calculateHoursWorked(logInTime, logOutTime);
 
-                        System.out.println("Date: " + date + " | Hours Worked: " + hoursWorked);
+                        System.out.println("Date: " + date + " | Employee #: " + status + " | Hours Worked: " + hoursWorked);
                         attendanceFound = true;
                     }
                 }
@@ -175,7 +182,7 @@ public class TACP1 {
                 System.out.println("No attendance records found for Employee #" + empNumber);
             }
 
-            System.out.println("End of line");
+            System.out.println("===================================================");
             br.close();
         } catch (Exception e) {
             System.out.println("Error accessing Google Sheets: " + e.getMessage());
@@ -184,21 +191,27 @@ public class TACP1 {
 
 
 
+
     // Method to calculate hours worked
     private static double calculateHoursWorked(String logIn, String logOut) {
-        try {
-            if (!logIn.isEmpty() && !logOut.isEmpty()) {
-                LocalTime inTime = LocalTime.parse(logIn, TIME_FORMAT);
-                LocalTime outTime = LocalTime.parse(logOut, TIME_FORMAT);
-                Duration duration= Duration.between(inTime, outTime);
-                return duration.toMinutes() / 60.0; // Convert minutes to hours
+    try {
+        if (!logIn.isEmpty() && !logOut.isEmpty()) {
+            LocalTime inTime = LocalTime.parse(logIn, TIME_FORMAT);
+            LocalTime outTime = LocalTime.parse(logOut, TIME_FORMAT);
+
+            if (outTime.isBefore(inTime)) {
+                System.out.println("Error: Logout time is before login time.");
+                return 0.0;
             }
-        } catch (Exception e) {
-            System.out.println("Error parsing time: " + e.getMessage());
-            System.out.println("Log In: " + logIn + ", Log Out: " + logOut + " => Hours Worked: " + duration.toMinutes() / 60.0);
+
+            Duration duration = Duration.between(inTime, outTime);
+            return duration.toMinutes() / 60.0 - 1; // Deduct 1 hour
         }
-        return 0.0; // Default to 0 if parsing fails
+    } catch (Exception e) {
+        System.out.println("Error parsing time: " + e.getMessage());
     }
+    return 0.0;
+}
     
  
     public static void calculateWeeklyHours(String empNumber) {
@@ -257,7 +270,9 @@ public static void viewPayroll(String empNumber) {
             System.out.println("\n1. SALARY");
             System.out.println("2. DEDUCTIONS");
             System.out.println("3. Back to Main Menu");
+            System.out.println("----------------------------");
             System.out.print("\nEnter your choice: ");
+            
 
              int choice = scanner.nextInt();
              scanner.nextLine(); // Consume newline
@@ -287,32 +302,56 @@ public static void calculateSalary(String empNumber) {
         BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream()));
         br.readLine(); // Skip header
 
-        String line;
-        double totalSalary = 0;
+        String salaryStr = "5,000";
+        double salary = 5000.0;
+        boolean salaryFound = false;
 
-        while ((line = br.readLine()) != null) {
-            String[] data = line.split(",");
+        while ((salaryStr = br.readLine()) != null) {
+            String[] data = salaryStr.split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)", -1);
+            
             if (data.length >= 18 && data[0].trim().equals(empNumber)) { // Ensure sufficient columns
                 try {
-                    totalSalary = Double.parseDouble(data[17].trim()); // Column 14 (Index 13)
-                    System.out.println("Fetched Salary from Profile_GID: " + totalSalary); // Debugging Output
+                    salaryStr = data[13].trim().replaceAll("[\",]", "").trim(); // Column 14 (Index 13)
+                    
+                    //other compensation
+                    String riceSubsidy = data[14].trim().replaceAll("[\",]", "");
+                    String phoneAllowance = data[15].trim().replaceAll("[\",]", "");
+                    String clothingAllowance = data[16].trim().replaceAll("[\",]", "");
+                    String grossSemiMonthlyRate = data[17].trim().replaceAll("[\",]", "");
+                    String hourlyRate = data[18].trim().replaceAll("[\",]", "");
+                    
+                    // Convert to double AFTER cleaning
+                    salary = Double.parseDouble(salaryStr);                    
+                    System.out.println("Salary: " + salary);
+                    
+                    salaryFound = true;
+                    
+                    // Print Additional Data
+                    System.out.println("Rice Subsidy: PHP " + riceSubsidy);
+                    System.out.println("Phone Allowance: PHP " + phoneAllowance);
+                    System.out.println("Clothing Allowance: PHP " + clothingAllowance);
+                    System.out.println("Gross Semi-Monthly Rate: PHP " + grossSemiMonthlyRate);
+                    System.out.println("Hourly Rate: PHP " + hourlyRate);
+                    
+                    
+                    return; 
+                    
                 } catch (NumberFormatException e) {
                     System.out.println("Error: Invalid number format in salary data. " + e.getMessage());
                     return;
                 }
-                break; // Exit loop after finding the matching employee
             }
         }
-        br.close();
-
-        // If no salary was found, print an error message
-        if (totalSalary == 0) {
+        
+        if (!salaryFound) {
             System.out.println("Error: No salary data found for Employee #" + empNumber);
-            return;
-        }
-
+}
+        
+        //method to get deductions 
+        //LINE AFTER THIS ARE STILL INPROGRESS
+        
         // Step 2: Compute Hourly Rate (column 14 / 21) / 8
-        double hourlyRate = (totalSalary / 21) / 8;
+        double hourlyRate = (Double.parseDouble(salaryStr) / 21) / 8 ;
 
         // Step 3: Get Total Hours Worked
         double totalHoursWorked = getTotalHoursWorked(empNumber);
@@ -325,61 +364,13 @@ public static void calculateSalary(String empNumber) {
         System.out.println("Computed Hourly Rate: " + hourlyRate);
         System.out.println("Total Hours Worked: " + totalHoursWorked);
         System.out.println("Final Computed Salary: " + computedSalary);
+        System.out.println("----------------------------");
 
     } catch (Exception e) {
         System.out.println("Error calculating salary: " + e.getMessage());
     }
    
 }
-
-/*public static void calculateSalary(String empNumber) {
-    try {
-        // Step 1: Fetch Employee Hourly Rate (Column S, Index 18)
-        String urlWithGid = empDETAILS_URL + "&gid=" + empPROFILE_GID; // Use Profile GID
-        HttpURLConnection conn = (HttpURLConnection) new URL(urlWithGid).openConnection();
-        conn.setRequestMethod("GET");
-
-        BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream()));
-        br.readLine(); // Skip header
-
-        String line;
-        double hourlyRate = 0.0;
-
-        while ((line = br.readLine()) != null) {
-            String[] data = line.split(",");
-            if (data.length >= 19 && data[0].trim().equals(empNumber)) {
-                try {
-                    hourlyRate = Double.parseDouble(data[18].trim()); // Fetch Hourly Rate from Column S
-                } catch (NumberFormatException e) {
-                    System.out.println("Error: Invalid number format in hourly rate data. " + e.getMessage());
-                    return;
-                }
-                break;
-            }
-        }
-        br.close();
-
-        // Step 2: Get Total Hours Worked
-        double totalHoursWorked = getTotalHoursWorked(empNumber);
-
-        // Step 3: Compute Salary
-        double computedSalary = totalHoursWorked * hourlyRate;
-
-        // Output
-        System.out.printf("Computed Salary for Employee #%s: PHP %.2f%n", empNumber, computedSalary);
-        System.out.println("Fetched Hourly Rate from Column S: " + hourlyRate);
-        System.out.println("Total Hours Worked: " + totalHoursWorked);
-        System.out.println("Computed Salary: " + computedSalary);
-
-    } catch (Exception e) {
-        System.out.println("Error calculating salary: " + e.getMessage());
-    }
-} */
-
-
-
-
-
 
 public static double getTotalHoursWorked(String empNumber) {
     double totalHours = 0.0;
@@ -443,7 +434,9 @@ private static void calculateDeductions(String empNumber) {
                 System.out.println("2. View Attendance");
                 System.out.println("3. View Payroll");
                 System.out.println("4. Logout");
+                System.out.println("----------------------------");
                 System.out.print("\nEnter your choice: ");
+                
 
                 int choice = scanner.nextInt();
                 scanner.nextLine(); // Consume newline
